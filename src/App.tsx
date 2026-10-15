@@ -3,7 +3,8 @@ import {ArrowUpRight,ArrowRight,ArrowLeft,Search,X,MapPin,Navigation,Footprints,
 import {places,routeBetween,type Place} from './data/campus';
 import {availableFloors} from './data/indoor-floors';
 import {verifiedEvents,occursOn,guangzhouDate} from './data/campus-events';
-import type {CameraCommand} from './CampusScene';
+import {inZone} from './data/zones';
+import type {CameraCommand,LabelStatus} from './CampusScene';
 import {shortName} from './data/display';
 const CampusScene=lazy(()=>import('./CampusScene'));
 const IndoorExplorer=lazy(()=>import('./IndoorExplorer'));
@@ -16,14 +17,15 @@ const photoFor=(p:Place)=>p.photo??(p.category==='运动'?'/photos/sports.jpg':p
 function readSaved():string[]{try{return JSON.parse(localStorage.getItem('gafa-atlas-saved')||'[]');}catch{return [];}}
 class SceneBoundary extends Component<{children:ReactNode},{failed:boolean}>{state={failed:false};static getDerivedStateFromError(){return {failed:true};}render(){return this.state.failed?<div className="scene-fallback"><img src="/photos/plan.jpg" alt="校园平面参考图"/><p>当前设备未能载入三维视图，可以继续使用地点搜索。</p></div>:this.props.children;}}
 export default function App(){
- const [showAll,setShowAll]=useState(false);
+ const [showAll,setShowAll]=useState(false),[view,setView]=useState<'overview'|'top'>('overview');
+ const [allLabels,setAllLabels]=useState(false),[labelStatus,setLabelStatus]=useState<LabelStatus>({complete:true,visible:0,total:places.length});
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[category,setCategory]=useState('全部'),[zone,setZone]=useState('all'),[tab,setTab]=useState<Tab>('explore');
  const [saved,setSaved]=useState<string[]>(readSaved),[night,setNight]=useState(false),[labels,setLabels]=useState(true),[start,setStart]=useState('south'),[routing,setRouting]=useState(false),[indoor,setIndoor]=useState(false),[about,setAbout]=useState(false),[expanded,setExpanded]=useState(false),[notice,setNotice]=useState('');
  const [command,setCommand]=useState<CameraCommand>({kind:'overview',nonce:0}),[date,setDate]=useState(guangzhouDate()),[lessons,setLessons]=useState<Lesson[]>(()=>{try{return JSON.parse(localStorage.getItem('gafa-atlas-lessons')||'[]');}catch{return [];}});
  const labelLayer=useRef<HTMLDivElement>(null),search=useRef<HTMLInputElement>(null),sceneContainer=useRef<HTMLDivElement>(null);
  const place=places.find(p=>p.id===selected),route=useMemo(()=>selected&&selected!==start?routeBetween(start,selected):null,[selected,start]);
- const issue=(kind:CameraCommand['kind'])=>setCommand(c=>({kind,nonce:c.nonce+1}));
- const choose=(id:string)=>{setSelected(id);setRouting(false);setExpanded(false);setCommand(c=>({kind:'focus',nonce:c.nonce+1}));};
+ const issue=(kind:CameraCommand['kind'])=>{if(kind==='top'||kind==='overview')setView(kind);setCommand(c=>({kind,nonce:c.nonce+1}));};
+ const choose=(id:string)=>{setView('overview');setSelected(id);setRouting(false);setExpanded(false);setCommand(c=>({kind:'focus',nonce:c.nonce+1}));};
  const clear=()=>{setSelected(null);setRouting(false);setIndoor(false);issue('overview');};
  const toggleSaved=(id:string)=>setSaved(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);
  useEffect(()=>localStorage.setItem('gafa-atlas-saved',JSON.stringify(saved)),[saved]);
@@ -31,11 +33,11 @@ export default function App(){
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{const editable=e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement;if(e.key==='Escape'){setIndoor(false);setAbout(false);setExpanded(false);}if(e.key==='/'&&!editable){e.preventDefault();setTab('explore');setExpanded(true);search.current?.focus();}};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[]);
  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),3500);return()=>clearTimeout(timer);},[notice]);
  useEffect(()=>{if(!about&&!indoor)return;const previous=document.activeElement as HTMLElement|null;const timer=setTimeout(()=>document.querySelector<HTMLElement>('[role="dialog"] button')?.focus(),50);const trap=(e:KeyboardEvent)=>{if(e.key!=='Tab')return;const els=[...document.querySelectorAll<HTMLElement>('[role="dialog"] button,[role="dialog"] select,[role="dialog"] a[href]')].filter(el=>el.offsetParent!==null);if(!els.length)return;const first=els[0],last=els[els.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}};window.addEventListener('keydown',trap);return()=>{clearTimeout(timer);window.removeEventListener('keydown',trap);previous?.focus();};},[about,indoor]);
- const results=places.filter(p=>(tab!=='saved'||saved.includes(p.id))&&(category==='全部'||p.category===category)&&(zone==='all'||(zone==='teaching'?p.z>=-15:p.z<0))&&(!query||(p.name+p.aliases+p.en).toLowerCase().replace(/\s/g,'').includes(query.toLowerCase().replace(/\s/g,''))));
+ const results=places.filter(p=>(tab!=='saved'||saved.includes(p.id))&&(category==='全部'||p.category===category)&&inZone(p,zone)&&(!query||(p.name+p.aliases+p.en).toLowerCase().replace(/\s/g,'').includes(query.toLowerCase().replace(/\s/g,''))));
  const filtered=showAll||query||category!=='全部'||zone!=='all'||tab==='saved';
  const display=filtered?results:curated.map(id=>places.find(p=>p.id===id)!);
  const showRoute=()=>{if(!route)return;setRouting(true);setExpanded(false);issue('route');};
- const changeZone=(value:string)=>{setZone(value);setSelected(null);setRouting(false);issue('overview');};
+ const changeZone=(value:string)=>{setZone(value);setCategory('全部');setLabels(true);setSelected(null);setRouting(false);issue(view==='top'?'top':'overview');};
  async function importLessons(file:File){try{const text=await file.text();let data:unknown;if(file.name.endsWith('.json'))data=JSON.parse(text);else{const rows=text.replace(/^\uFEFF/,'').trim().split(/\r?\n/);data=rows.slice(1).map(row=>{const [time,room,name,day]=row.split(',').map(x=>x.trim());return {time,room,name,day:day?Number(day):undefined};});}if(!Array.isArray(data))throw Error();const valid=data.filter((x):x is Lesson=>typeof x?.time==='string'&&typeof x?.room==='string').map(x=>({...x,name:x.name||'课程'}));if(!valid.length)throw Error();setLessons(valid);setNotice(`已导入 ${valid.length} 条课程`);}catch{setNotice('导入失败，请使用包含 time、room、name 列的 CSV 或 JSON。');}}
  const locateRoom=(room:string)=>{const match=room.replace(/^SLD-|^SID-/i,'').match(/^([ABCDEJ])/i);const id=match?.[1].toLowerCase();if(id)choose(id==='c'?'library':id);else setNotice('未能匹配楼栋，请在地点搜索中查找。');};
  return <div className={`atlas ${night?'is-night':''}`}>
@@ -59,11 +61,12 @@ export default function App(){
    <section ref={sceneContainer} className="map-stage" aria-label="交互式校园三维地图">
     <div className="map-corner-title"><span>GUANGZHOU ACADEMY OF FINE ARTS</span><h2>{routing?'沿着这条路，出发。':place?shortName(place):zone==='residential'?'生活，也是一门艺术。':zone==='teaching'?'灵感发生的地方。':'把校园，放在眼前。'}</h2></div>
     <div className="zone-switch" aria-label="地图区域">{[['all','校园全景'],['teaching','教学区'],['residential','生活区']].map(([value,label])=><button key={value} className={zone===value?'active':''} aria-pressed={zone===value} onClick={()=>changeZone(value)}>{label}</button>)}</div>
-    <SceneBoundary><Suspense fallback={<div className="scene-loading"><Layers size={36}/><span>正在展开校园…</span></div>}><CampusScene selected={selected} category={category} zone={zone} night={night} labels={labels} route={routing?route?.points??null:null} command={command} onSelect={choose} labelLayer={labelLayer}/></Suspense></SceneBoundary>
-    <div className="map-label-layer" ref={labelLayer}>{places.map(p=><button key={p.id} data-place={p.id} className={`map-label ${selected===p.id?'selected':''}`} onClick={()=>choose(p.id)} aria-label={`定位${p.name}`}><span className={`label-dot category-${p.category}`}/>{shortName(p)}{selected===p.id&&<ArrowUpRight size={12}/>}</button>)}</div>
+    <SceneBoundary><Suspense fallback={<div className="scene-loading"><Layers size={36}/><span>正在展开校园…</span></div>}><CampusScene selected={selected} category={category} zone={zone} night={night} labels={labels} route={routing?route?.points??null:null} command={command} onSelect={choose} labelLayer={labelLayer} allLabels={allLabels} onLabelStatus={setLabelStatus}/></Suspense></SceneBoundary>
+    <div className="map-label-layer" ref={labelLayer}><svg className="label-links" aria-hidden="true">{places.map(p=><line key={p.id} data-link={p.id}/>)}</svg>{places.map(p=><button key={p.id} data-place={p.id} className={`map-label ${selected===p.id?'selected':''}`} onClick={()=>choose(p.id)} aria-label={`定位${p.name}`}><span className={`label-dot category-${p.category}`}/>{shortName(p)}{selected===p.id&&<ArrowUpRight size={12}/>}</button>)}</div>
+    <button className="label-density" aria-label={allLabels?'恢复智能标注':'始终显示全部名称'} aria-pressed={allLabels} onClick={()=>{setAllLabels(v=>!v);setLabels(true);}} title="全景和分区显示全部名称；旋转或放大时精简。点击可固定完整标注。"><Layers size={12}/><span>{allLabels?'全部名称':labelStatus.complete?'完整标注':'智能精简'}</span><small>{labelStatus.visible} / {labelStatus.total}</small></button>
     <div className="map-tools"><button className="compass-button" aria-label="北向俯视" onClick={()=>issue('top')}><span>N</span><Compass size={26} strokeWidth={1.2}/></button><div className="tool-stack"><button aria-label="放大地图" title="放大" onClick={()=>issue('zoom-in')}><Plus size={19}/></button><button aria-label="缩小地图" title="缩小" onClick={()=>issue('zoom-out')}><Minus size={19}/></button><i/><button aria-label="俯视地图" title="俯视" onClick={()=>issue('top')}><Map size={19}/></button><button aria-label="重置视角" title="重置" onClick={()=>issue('overview')}><RotateCcw size={18}/></button></div><button className={`label-switch ${labels?'active':''}`} aria-pressed={labels} aria-label={labels?'隐藏地图标签':'显示地图标签'} title="地图标签" onClick={()=>setLabels(!labels)}><MapPin size={18}/></button></div>
     {routing&&route&&<div className="route-floating" role="status"><span className="route-walk"><Footprints size={21}/></span><div><strong>{shortName(places.find(p=>p.id===start)!)} <ArrowRight size={13}/> {place&&shortName(place)}</strong><span>约 {route.minutes} 分钟 · {route.meters} 米{route.crossesBridge?' · 途经天桥':''}</span></div><button aria-label="关闭路线" onClick={()=>setRouting(false)}><X size={16}/></button></div>}
-    <div className="map-bottom"><div className="map-legend"><span><i className="legend-building"/>建筑</span><span><i className="legend-green"/>绿地</span><span><i className="legend-water"/>水域</span></div><div className="view-controls"><button className={command.kind!=='top'?'active':''} onClick={()=>issue('overview')}>3D 漫游</button><button className={command.kind==='top'?'active':''} onClick={()=>issue('top')}>俯视导览</button></div><span className="gesture-hint">拖动旋转 · 双指缩放</span></div>
+    <div className="map-bottom"><div className="map-legend"><span><i className="legend-building"/>建筑</span><span><i className="legend-green"/>绿地</span><span><i className="legend-water"/>水域</span></div><div className="view-controls"><button className={view!=='top'?'active':''} onClick={()=>issue('overview')}>3D 漫游</button><button className={view==='top'?'active':''} onClick={()=>issue('top')}>俯视导览</button></div><span className="gesture-hint">拖动旋转 · 双指缩放</span></div>
     <div className="map-footnote"><span>GAFA CAMPUS <b>/</b> UNIVERSITY TOWN</span><button onClick={()=>setAbout(true)}>模型与路线为参考示意 <Info size={11}/></button></div>
    </section>
   </main>

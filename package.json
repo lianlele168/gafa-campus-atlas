@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1 --port 5180",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5180",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/label-layout.test.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.0.0",

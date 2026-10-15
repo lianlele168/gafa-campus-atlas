@@ -12,3 +12,7 @@
 @media(max-width:760px){.floor-plan-scroll .floor-svg{height:280px;padding:0}.floor-visual>.floor-plan-scroll{height:280px}.floor-visual:has(.floor-plan-scroll){min-height:280px}}
 
 .atlas{color:var(--ink)}
+.label-density{position:absolute;top:85px;left:32px;z-index:5;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px;padding:4px 0}.label-density small{font-size:9px;font-variant-numeric:tabular-nums;opacity:.8}.label-density[aria-pressed=true]{color:var(--accent)}.label-density:hover{color:var(--ink)}
+.label-links{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none}.label-links line{display:none;stroke:#74856b;stroke-width:1;opacity:.55}.map-label-layer[data-mode=complete] .map-label{padding:4px 6px;font-size:11px;gap:4px;box-shadow:0 1px 4px #344d3615}.map-label-layer[data-mode=complete] .map-label:after{display:none}.is-night .label-links line{stroke:#b1c1a4}
+@media(max-width:760px){.label-density{top:66px;left:20px;font-size:9px;gap:5px}.label-density small{font-size:8px}.map-label-layer[data-mode=complete] .map-label{font-size:10px;padding:4px 5px;gap:3px}.map-label-layer[data-mode=complete] .label-dot{width:3px;height:3px}}
+
